@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="myApp" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>My AngularJS App</title>
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="bower_components/bootstrap/dist/css/bootstrap.css">
+</head>
+<body>
+    <div ng-controller="DebugViewController">
+        <input type="text" value="id" ng-model="id"/>
+        <input type="button" value="Load data" ng-click="loadData()"/>
+        <pre>
+            {{loadedResults}}
+        </pre>
+
+    </div>
+
+    <div ng-controller="CalculatorController">
+        <input type="text" value="id" ng-model="id"/>
+        <input type="button" value="Calculate" ng-click="calculate()"/>
+        <pre>
+            {{calculatedFormulas}}
+        </pre>
+
+    </div>
+
+
+    <script src="bower_components/jQuery/dist/jquery.min.js"></script>
+    <script src="bower_components/jaydata/datajs-1.0.3.min.js"></script>
+    <script src="bower_components/angular/angular.js"></script>
+    <script src="bower_components/jaydata/release/jaydata.js"></script>
+    <script src="bower_components/jaydata/release/jaydatamodules/angular.js"></script>
+
+    <script src="app.js"></script>
+    <script src="DebugViewControllerModule.js"></script>
+    <script src="CalculatorControllerModule.js"></script>
+    <script src="LoaderServiceModule.js"></script>
+    </body>
+</html>
