@@ -12,7 +12,6 @@ module.exports = function(config){
         ],
 
         frameworks: ['mocha','chai'],
-        //frameworks: ['jasmine'],
 
         singleRun: true,
 

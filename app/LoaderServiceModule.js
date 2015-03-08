@@ -71,9 +71,6 @@ m.service('LoaderService', ['$data',function($data) { //$data is injected by jay
 //methods returned to the outsideWorld
     return {
         initialize : initialize,
-        ////for testing only, never call these in angular code
-
-        //,
         dataForPricing: chain,
         //rdsplusbyid : rdsplusbyid,
         //odsplusbyid : odsplusbyid

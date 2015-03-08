@@ -28,8 +28,10 @@ describe('LoaderServiceModule', function() {
             //});
         });
 
-        it('should respond to method', function (done) {
+        it('should have method dataForPricing', function (done) {
             LoaderService.should.respondTo('dataForPricing');
+            done();
+
         });
     });
 
