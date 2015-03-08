@@ -30,17 +30,28 @@ var businessContext = {
 
 
 ///HELPER registering calls on a result tree
-function register(tree,f) {
-    tree[arguments.callee.caller.name]={};
+function register(tree,description, math, f) {
+    tree[arguments.callee.caller.name]={
+        description: description,
+        math: math
+    };
     var tree = tree[arguments.callee.caller.name];
+    tree['result']=0;
     var r = f.call(this,tree);
     tree['result']=r;
     return r;
 }
 ///END HELPER
 
+
+
+//TOP LEVEL individual formula template
+//every formula declared this way will be available as a 'box' in final treemap visualization
+//each formula will track its dependencies
+//first two lines of the declaration are obligatory if the formula is to propagate business context and store result
+//in the tree
 function functionA(tree) {
-    return register.call(this,tree,function(tree){
+    return register.call(this,tree,'top formula','B1+B2',function(tree){
 
         //HERE GOES YOUR COMPLEX FORMULA operating on piece of business context passed into 'this'
         //subsequent calls to other nested functions that need to be in a result tree need to follow this pattern:
@@ -60,7 +71,7 @@ function functionA(tree) {
 }
 
 function functionB1(tree) {
-    return register.call(this,tree,function(tree) {
+    return register.call(this,tree,'some other','b+C1',function(tree) {
 
         return this.a * this.b * functionC1.call(this.series, tree); //1*2*30 = 60
 
@@ -68,7 +79,7 @@ function functionB1(tree) {
 }
 
 function functionB2(tree) {
-    return register.call(this, tree, function (tree) {
+    return register.call(this, tree, 'and another','rf+beta*(rm-rf)',function (tree) {
 
         return this.rf + this.beta * (this.rm - this.rf); //2 + 1.5*(5-2) = 6.5
 
@@ -77,7 +88,7 @@ function functionB2(tree) {
 
 
 function functionC1(tree) { //basically sum up
-    return register.call(this, tree, function (tree) {
+    return register.call(this, tree, 'and summing up vector','SUM(x)', function (tree) {
 
         return this.reduceRight(function (pv, cv) {
             return pv + cv;
@@ -86,17 +97,34 @@ function functionC1(tree) { //basically sum up
     });
 }
 
+// TESTING THE EQUATIONS
+
 
 var root = {}; //this is where my result tree goes, eventually to be returned to D3 for treemap
 
-var totalResults=functionA.call(businessContext,root); //66.5
+var totalResults=functionA.call(businessContext,root); //call everything, just by calling top function 66.5
 
 console.log(totalResults);
-console.log(DumpObjectIndented(root,'')); //and this can go straight to the treemap
-
-process.exit();
+console.log("From root:\n" + DumpObjectIndented(root,'')); //and this can go straight to the treemap
 
 
+
+var partial={};
+var partialResults=functionB1.call(businessContext.stuff, partial);
+
+console.log("\n\nJust partial\n:" + DumpObjectIndented(partial,'')); //and this can go straight to the treemap
+
+
+//WHY is it all necessary?
+//1. complete separation of loading of the data from calculation = calculation will work on a
+// businessContext object, irrespective of where it comes from, and irrespective of inconsistencies
+// of the data in source databases
+//2. formulas are documented right in the code, math representation can also be defined right away
+//3. complete structure of calculation is preserved and can be directly used to draw a tree map
+//4. various visualization can be 'plugged' independently
+//5. multiple pricings can be retrieved, calculated and visualized on one page
+//6. all formulas can be tested independently of everything else, in pieces or in parts
+//7. very easy to cache or save the results if necessary
 
 //pretty print for debug
 function DumpObjectIndented(obj, indent)
@@ -131,3 +159,5 @@ function DumpObjectIndented(obj, indent)
     }
     return result.replace(/,\n$/, "");
 }
+
+process.exit();
