@@ -1,23 +1,37 @@
 //'use strict';
 
+//PART 0, HELPER 'register' registering calls on a result tree, and handling basic exceptions
+//having this function enables us to LATER add more error handling, change the shape of the result object etc.
+//WITHOUT modifying any business logic formulas!!!
+function register(tree,description, math, f) {
+
+    tree[description]={
+        math: math,
+        function : f
+    };
+    tree = tree[description];
+    tree['result']=0;
+    var r = f.call(this,tree);
+    if (isNaN(r)) {
+        throw new Error('Formula ('+description+') returned NaN!\nThis object was passed to it:\n'+DumpObjectIndented(this,'  '));
+    }
+    tree['result']=r;
+    return r;
+}
+///END HELPER
+
 //PART 1
 //declaration of the business context, i.e. an object containing all data from ODS-P and RDSPLUS required for this case
 //this can be mightly nested (and probably will contain nested objects as well as arrays)
 //this is the object the LoaderService will eventually return after making all the calls, and that we can show (parts of) in the application
 var devBusinessContext = {
-    rf: 2,
-    beta:1.5,
-    rm: 5,
-    stuff : {
-        a: 1,
-        b: 2,
-        series:[2,4,6,8,10], //=30
-        evenmorestuff: {
-            x: 2,
-            y: 7,
-            z: 10
-        }
-    }
+    costOfCaptial: 0.04,
+    Wrisk: 1,
+    NominalIntensity: 0.5,
+    DiscountedLossIntensity: 0.5,
+    NominalLoss: 1000000,
+    DiscountedLoss: 7000000,
+    vector : [1,2,3,4,5,6,7,8]
 };
 
 
@@ -28,49 +42,27 @@ var devBusinessContext = {
 //bind to "this" of each function - this allows us to quickly prototype a complex tree and pass large structures
 //without gigantic function declarations
 
-
-///HELPER registering calls on a result tree
-function register(tree,description, math, f) {
-    tree = tree[arguments.callee.caller.name];
-    tree[arguments.callee.caller.name]={
-        description: description,
-        math: math
-    };
-    tree['result']=0;
-    var r = f.call(this,tree);
-    if (isNaN(r)) {
-        throw new Error('Formula '+arguments.callee.caller.name+' ('+description+') returned NaN!\nThis object was passed to it:\n'+DumpObjectIndented(this,'  '));
-    }
-    tree['result']=r;
-    return r;
-}
-///END HELPER
-
-
-
 //TOP LEVEL individual formula template
 //every formula declared this way will be available as a 'box' in final treemap visualization
 //each formula will track its dependencies
 //first two lines of the declaration are obligatory if the formula is to propagate business context and store result
 //in the tree
-//--->START TEMPLATE
-function functionA(tree) {
-    return register.call(this,tree,'top formula','B1+B2',function(tree){
+//--->START TEMPLATE (this is only for illustration it is not used
+function template(tree) {
+    return register.call(this,tree,'Capital Cost','A=B1+CAPM',function(tree){
 
         //---->START BODY
 
-        // HERE GOES YOUR COMPLEX FORMULA operating on piece of business context passed into 'this'
-        //subsequent calls to other nested functions that need to be in a result tree need to follow this pattern:
-        //
-        //     functionName.call(this.<something?,tree)
-        //
-        //where this.something is the whole (just: "this") or a piece of a branch of business context, like here:
-        //functionB1 only takes the 'stuff' branch of the businessContext, and functionB2 takes the whole businessContext
+            // HERE GOES YOUR COMPLEX FORMULA operating on piece of business context passed into 'this'
+            //subsequent calls to other nested functions that need to be in a result tree need to follow this pattern:
+            //
+            //     functionName.call(this<.something>,tree)
+            //
+            //where this.something is the whole (just: "this") or a piece of a branch of business context, like here:
+            //functionB1 only takes the 'stuff' branch of the businessContext, and functionB2 takes the whole businessContext
 
-        var r = functionB1.call(this.stuff,tree)+functionB2.call(this,tree);
-
-        return r;
-        //ALWAYS ENDS with return of the numerical result!!!
+            return this.costOfCaptial*EVMCapital.call(this.vector,tree);
+            //ALWAYS ENDS with return of the numerical result!!!
 
         //<----END BODY
 
@@ -78,32 +70,66 @@ function functionA(tree) {
 }
 //<--END TEMPLATE
 
-function functionB1(tree) {
-    return register.call(this,tree,'some other','b+C1',function(tree) {
 
-        return this.a * this.b * functionC1.call(this.series, tree); //1*2*30 = 60
+//implementation from the top
 
-    });
-}
+function totalCosting(tree) {
+    return register.call(this,tree,'Total costing','[EC,CMR, CC,...]',function(tree){
 
-function functionB2(tree) {
-    return register.call(this, tree, 'and another','rf+beta*(rm-rf)',function (tree) {
+        var cc = CapitalCost.call(this,tree);
+        var evmc = EC.call(this,tree);
 
-        return this.rf + this.beta * (this.rm - this.rf); //2 + 1.5*(5-2) = 6.5
+        return 0; //I don't know how and whether they should be combined
 
     });
 }
 
+//--> individual formulas, drawing from the businessContext present in THIS
+function EC(tree) {
+    return register.call(this,tree,'EC','...',function(tree) {
 
-function functionC1(tree) { //basically sum up
-    return register.call(this, tree, 'summing up a vector of cashflows','SUM(x)', function (tree) {
-
-        return this.reduceRight(function (pv, cv) {
-            return pv + cv;
-        }, 0); //30
+        return 0;
 
     });
 }
+
+function CapitalCost(tree) {
+    return register.call(this,tree,'Capital Cost','CC=CostOfCapital * EVMCapital',function(tree){
+
+        return this.costOfCaptial*EVMCapital.call(this,tree)
+
+    });
+}
+
+
+function EVMCapital(tree) {
+    return register.call(this,tree,'EVM Capital','EVMCapital = EVMCapitalRisk * Wrisk^2',function(tree) {
+
+        return EVMCapitalRisk.call(this,tree)*this.Wrisk;
+
+    });
+}
+
+function EVMCapitalRisk(tree) {
+    return register.call(this,tree,'description','EVMCapitalRisk = NominalLoss*NominalIntensity+DiscountedLoss*DiscountetLossIntensity',function(tree) {
+
+        return this.NominalLoss*this.NominalIntensity+this.DiscountedLoss*this.DiscountedLossIntensity;
+
+    });
+}
+
+function sumVector(tree) {
+    return register.call(this,tree,'EVMCapitalRisk','EVMCapitalRisk = NominalLoss*NominalIntensity+DiscountedLoss*DiscountetLossIntensity',function(tree) {
+
+        return this.NominalLoss*this.NominalIntensity+this.DiscountedLoss*this.DiscountedLossIntensity;
+
+    });
+}
+//<--
+
+
+
+
 
 // TESTING THE EQUATIONS
 
@@ -112,21 +138,14 @@ function functionC1(tree) { //basically sum up
 
 //call everything, just by calling top function
 //with devBusinessContext and new empty object root as the result tree
-var totalGraph = {}; //this is where my result tree goes, eventually to be returned to D3 for treemap
-var totalResults=functionA.call(devBusinessContext,totalGraph);
+var resultGraph= {}; //this is where my result tree goes, eventually to be returned to D3 for treemap
+var resultValue=totalCosting.call(devBusinessContext,resultGraph);
 //that's, right here the whole thing is calculated!!!
 
-console.log(totalResults);
-console.log("From root:\n" + DumpObjectIndented(totalGraph,'')); //and this can go straight to the treemap
+console.log('Final result ='+resultValue);
+console.log("\nCalculation of the whole system:\n" + DumpObjectIndented(resultGraph,'')); //and this can go straight to the treemap
 
 
-//some stuff
-//Second test
-
-var partialGraph={};
-var partialResults=functionB1.call(devBusinessContext.stuff, partialGraph);
-console.log(partialResults);
-console.log("\n\nJust partial\n:" + DumpObjectIndented(partialGraph,'')); //and this can go straight to the treemap
 
 
 //WHY is it all necessary?
@@ -136,7 +155,7 @@ console.log("\n\nJust partial\n:" + DumpObjectIndented(partialGraph,'')); //and 
 // 2. formulas are documented right in the code, math representation can also be defined right away
 // 3. each function is INDEPENDENTLY TESTABLE!!!
 // 4. shape of returning object and method of calling subsequent functions is determined by REGISTER and can be changed
-//    if necessary, e.g. to accomodate progressive calculation as new data comes in
+//    if necessary, e.g. to accommodate progressive calculation as new data comes in
 // 5. complete structure of calculation is preserved and can be directly used to draw a tree map
 // 6. various visualization can be 'plugged' independently
 // 7. multiple pricings can be retrieved, calculated and visualized on one page
