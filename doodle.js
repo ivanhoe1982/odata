@@ -1,23 +1,28 @@
 //'use strict';
 
-//PART 0, HELPER 'register' registering calls on a result tree, and handling basic exceptions
-//having this function enables us to LATER add more error handling, change the shape of the result object etc.
+//PART 0, HELPER CalcBlock wrapping larger part of the calculation and registering calls on a result tree,
+//handling basic exceptions having this function enables us to LATER add more error handling, change the shape of the result object etc.
 //WITHOUT modifying any business logic formulas!!!
-function register(tree,description, math, f) {
+var CalcBlock = function(description, math, f) {
+    var description=description;
+    var math = math;
+    var f = f;
 
-    tree[description]={
-        math: math,
-        function : f
+    return function(tree) {
+        tree[description]={
+            math: math
+            //,                function : f
+        };
+        tree = tree[description];
+        tree['result']=0;
+        var r = f.call(this,tree);
+        if (isNaN(r)) {
+            throw new Error('Formula ('+description+') returned NaN!\nThis object was passed to it:\n'+DumpObjectIndented(this,'  '));
+        }
+        tree['result']=r;
+        return r;
     };
-    tree = tree[description];
-    tree['result']=0;
-    var r = f.call(this,tree);
-    if (isNaN(r)) {
-        throw new Error('Formula ('+description+') returned NaN!\nThis object was passed to it:\n'+DumpObjectIndented(this,'  '));
-    }
-    tree['result']=r;
-    return r;
-}
+};
 ///END HELPER
 
 //PART 1
@@ -25,7 +30,7 @@ function register(tree,description, math, f) {
 //this can be mightly nested (and probably will contain nested objects as well as arrays)
 //this is the object the LoaderService will eventually return after making all the calls, and that we can show (parts of) in the application
 var devBusinessContext = {
-    costOfCaptial: 0.04,
+    costOfCapital: 0.04,
     Wrisk: 1,
     NominalIntensity: 0.5,
     DiscountedLossIntensity: 0.5,
@@ -36,96 +41,78 @@ var devBusinessContext = {
 
 
 //PART 2
-//declaration of functions representing individual formulas
-//this example starts from the TOP and we progressively "deconstruct" the businessContext into smaller pieces
+//declaration of functions representing individual calculation blocks, i.e. all 'squares in the treemap'
+//this example starts from the TOP
 //what's important, is that we do not specifically declare parameters in functions, but rather pass it with "call" and
 //bind to "this" of each function - this allows us to quickly prototype a complex tree and pass large structures
-//without gigantic function declarations
+//without gigantic function declarations, and avoiding a lot of bugs
 
 //TOP LEVEL individual formula template
 //every formula declared this way will be available as a 'box' in final treemap visualization
 //each formula will track its dependencies
-//first two lines of the declaration are obligatory if the formula is to propagate business context and store result
-//in the tree
+//first line of the declaration is obligatory if to register an individual CalcBlock
+
 //--->START TEMPLATE (this is only for illustration it is not used
-function template(tree) {
-    return register.call(this,tree,'Capital Cost','A=B1+CAPM',function(tree){
+var template = CalcBlock('Capital Cost','A=B1+CAPM',function(tree){
 
-        //---->START BODY
+    //---->START BODY
 
-            // HERE GOES YOUR COMPLEX FORMULA operating on piece of business context passed into 'this'
-            //subsequent calls to other nested functions that need to be in a result tree need to follow this pattern:
-            //
-            //     functionName.call(this<.something>,tree)
-            //
-            //where this.something is the whole (just: "this") or a piece of a branch of business context, like here:
-            //functionB1 only takes the 'stuff' branch of the businessContext, and functionB2 takes the whole businessContext
+        // HERE GOES YOUR COMPLEX FORMULA operating on piece of business context passed into 'this'
+        //subsequent calls to other nested functions that need to be in a result tree need to follow this pattern:
+        //
+        //     calcBlock.call(this<.something>,tree)
+        //
+        //where this.something is the whole (just: "this") or a piece of a branch of business context, like here:
+        //functionB1 only takes the 'stuff' branch of the businessContext, and functionB2 takes the whole businessContext
 
-            return this.costOfCaptial*EVMCapital.call(this.vector,tree);
-            //ALWAYS ENDS with return of the numerical result!!!
+        return this.costOfCaptial*EVMCapital.call(this.vector,tree);
+        //ALWAYS ENDS with return of the numerical result!!!
 
-        //<----END BODY
+    //<----END BODY
 
-    });
-}
+});
 //<--END TEMPLATE
 
 
-//implementation from the top
-
-function totalCosting(tree) {
-    return register.call(this,tree,'Total costing','[EC,CMR, CC,...]',function(tree){
-
-        var cc = CapitalCost.call(this,tree);
-        var evmc = EC.call(this,tree);
-
-        return 0; //I don't know how and whether they should be combined
-
-    });
-}
 
 //--> individual formulas, drawing from the businessContext present in THIS
-function EC(tree) {
-    return register.call(this,tree,'EC','...',function(tree) {
+//implementation from the top
 
-        return 0;
-
-    });
-}
-
-function CapitalCost(tree) {
-    return register.call(this,tree,'Capital Cost','CC=CostOfCapital * EVMCapital',function(tree){
-
-        return this.costOfCaptial*EVMCapital.call(this,tree)
-
-    });
-}
+var totalCosting = CalcBlock('Total costing','[EC,CMR, CC,...]',function(tree){
 
 
-function EVMCapital(tree) {
-    return register.call(this,tree,'EVM Capital','EVMCapital = EVMCapitalRisk * Wrisk^2',function(tree) {
+    x = EC.call(this,tree);
+    y = CapitalCost.call(this,tree);
 
-        return EVMCapitalRisk.call(this,tree)*this.Wrisk;
+    return 0; //I don't know how and whether they should be combined, so for the top I'm returning zero
+    //what's importatnt is that I called the next two
+});
 
-    });
-}
+var EC = CalcBlock('EC','...',function(tree) {
 
-function EVMCapitalRisk(tree) {
-    return register.call(this,tree,'description','EVMCapitalRisk = NominalLoss*NominalIntensity+DiscountedLoss*DiscountetLossIntensity',function(tree) {
+    return 0;
 
-        return this.NominalLoss*this.NominalIntensity+this.DiscountedLoss*this.DiscountedLossIntensity;
+});
 
-    });
-}
 
-function sumVector(tree) {
-    return register.call(this,tree,'EVMCapitalRisk','EVMCapitalRisk = NominalLoss*NominalIntensity+DiscountedLoss*DiscountetLossIntensity',function(tree) {
+var CapitalCost = CalcBlock('Capital Cost','CC=CostOfCapital * EVMCapital',function(tree){
 
-        return this.NominalLoss*this.NominalIntensity+this.DiscountedLoss*this.DiscountedLossIntensity;
+    return this.costOfCapital*EVMCapital.call(this,tree);
 
-    });
-}
-//<--
+});
+
+
+var EVMCapital=CalcBlock('EVM Capital','EVMCapital = EVMCapitalRisk * Wrisk^2',function(tree) {
+
+    return EVMCapitalRisk.call(this,tree)*this.Wrisk;
+
+});
+
+var EVMCapitalRisk=CalcBlock('description','EVMCapitalRisk = NominalLoss*NominalIntensity+DiscountedLoss*DiscountetLossIntensity',function(tree) {
+
+    return this.NominalLoss*this.NominalIntensity+this.DiscountedLoss*this.DiscountedLossIntensity;
+
+});
 
 
 
@@ -144,7 +131,6 @@ var resultValue=totalCosting.call(devBusinessContext,resultGraph);
 
 console.log('Final result ='+resultValue);
 console.log("\nCalculation of the whole system:\n" + DumpObjectIndented(resultGraph,'')); //and this can go straight to the treemap
-
 
 
 
